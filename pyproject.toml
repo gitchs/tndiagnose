@@ -11,8 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-list-topics = "internal.list_topics:main"
-list-partitions = "internal.list_partitions:main"
+kafka = "internal.kafka:cli"
 
 [build-system]
 requires = ["hatchling"]

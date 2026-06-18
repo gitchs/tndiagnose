@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **`kafka`** CLI group: `list-topics` and `list-partitions` are now subcommands
+  of a single `kafka` entry point (`uv run kafka list-topics`, etc.).
+- **`internal/kafka/`** package: moved `kafkautils.py`, `list_topics.py`,
+  `list_partitions.py` into a dedicated `internal/kafka/` directory.
+
 ## [0.1.0] — Unreleased
 
 ### Added

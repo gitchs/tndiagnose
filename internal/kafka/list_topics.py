@@ -2,11 +2,10 @@ import csv
 
 import click
 from confluent_kafka.admin import AdminClient
+from internal.kafka.kafkautils import fetch_topic_configs, load_properties
 
-from internal.kafkautils import fetch_topic_configs, load_properties
 
-
-@click.command()
+@click.command("list-topics")
 @click.option(
     "--config",
     "config_path",
@@ -21,7 +20,7 @@ from internal.kafkautils import fetch_topic_configs, load_properties
     show_default=True,
     help="Path to the output CSV file.",
 )
-def main(config_path, output_path):
+def list_topics(config_path, output_path):
     """Export all topic configurations from a Kafka cluster to CSV."""
 
     conf = load_properties(config_path)
@@ -43,4 +42,4 @@ def main(config_path, output_path):
 
 
 if __name__ == "__main__":
-    main()
+    list_topics()

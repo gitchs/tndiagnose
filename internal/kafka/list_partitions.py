@@ -1,13 +1,12 @@
 import csv
 
 import click
+from internal.kafka.kafkautils import fetch_partition_info, load_properties
 from rich.console import Console
 from rich.table import Table
 
-from internal.kafkautils import fetch_partition_info, load_properties
 
-
-@click.command()
+@click.command("list-partitions")
 @click.option("--topic", required=True, help="Kafka topic name.")
 @click.option(
     "--config",
@@ -30,7 +29,7 @@ from internal.kafkautils import fetch_partition_info, load_properties
     show_default=True,
     help="Max parallel consumers. Actual = min(concurrent, partitions).",
 )
-def main(topic, config_path, output_path, concurrency):
+def list_partitions(topic, config_path, output_path, concurrency):
     """List per-partition offsets, message count, and latest message time."""
 
     conf = load_properties(config_path)
@@ -59,4 +58,4 @@ def main(topic, config_path, output_path, concurrency):
 
 
 if __name__ == "__main__":
-    main()
+    list_partitions()
