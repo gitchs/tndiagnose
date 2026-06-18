@@ -113,23 +113,32 @@ def by_level(input_path, level, topk):
 @click.command("by-time")
 @click.option("--input", "input_path", required=True, help="JSON Lines file (.zst ok).")
 @click.option("--prefix", default="", help="Filter objects by key prefix.")
-def by_time(input_path, prefix):
-    """Analyze storage size distribution over time (by day)."""
+@click.option(
+    "--unit",
+    type=click.Choice(["d", "day", "m", "month"]),
+    default="d",
+    show_default=True,
+    help="Time granularity.",
+)
+def by_time(input_path, prefix, unit):
+    """Analyze storage size distribution over time."""
 
     db = duckdb.connect()
     _load_objects(db, input_path)
 
     where = f"WHERE key LIKE '{prefix}%'" if prefix else ""
+    is_month = unit[0] == "m"
+    trunc = "DATE_TRUNC('month', last_modified)" if is_month else "last_modified::DATE"
 
     rows = db.execute(
         f"""
         SELECT
-            last_modified::DATE AS day,
+            {trunc} AS period,
             SUM(size)::BIGINT AS total
         FROM objects
         {where}
-        GROUP BY day
-        ORDER BY day
+        GROUP BY period
+        ORDER BY period DESC
         """
     ).fetchall()
 
@@ -142,17 +151,20 @@ def by_time(input_path, prefix):
     grand_total = sum(r[1] for r in rows)
 
     console = Console()
-    table = Table(title=f"Size by day{' (prefix={prefix})' if prefix else ''}")
-    table.add_column("day", style="cyan")
+    label = "month" if is_month else "day"
+    table = Table(
+        title=f"Size by {label}{' (prefix=' + prefix + ')' if prefix else ''}"
+    )
+    table.add_column(label, style="cyan")
     table.add_column("size", justify="right")
     table.add_column("ratio", justify="right")
 
-    for day, total in rows:
+    for period, total in rows:
         ratio = total / grand_total * 100 if grand_total else 0
-        table.add_row(str(day), _pretty_size(total), f"{ratio:.1f}%")
+        table.add_row(str(period), _pretty_size(total), f"{ratio:.1f}%")
 
     console.print(table)
-    console.print(f"\nTotal: {_pretty_size(grand_total)} across {len(rows)} days")
+    console.print(f"\nTotal: {_pretty_size(grand_total)} across {len(rows)} {label}s")
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
