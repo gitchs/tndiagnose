@@ -34,11 +34,10 @@ def analyze(input_path, level, topk):
 
     db = duckdb.connect()
     db.execute(
-        """
+        f"""
         CREATE OR REPLACE VIEW objects AS
-        SELECT key, size FROM read_json_auto(?, format='newline_delimited')
-        """,
-        [input_path],
+        SELECT key, size FROM read_json_auto('{input_path}', format='newline_delimited')
+        """
     )
 
     rows = db.execute(
