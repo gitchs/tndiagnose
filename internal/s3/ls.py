@@ -56,24 +56,16 @@ def _write_output(rows, output_path):
             sys.stdout.write(json.dumps(row) + "\n")
         return
 
-    # --- TTY stdout: buffer first 101 to decide truncation ---
-    buf = []
+    # --- TTY stdout: stream first 100, then count silently ---
+    count = 0
     for row in rows:
-        buf.append(json.dumps(row))
-        if len(buf) > 100:
-            break
+        if count < 100:
+            sys.stdout.write(json.dumps(row) + "\n")
+        count += 1
 
-    if len(buf) <= 100:
-        for line in buf:
-            sys.stdout.write(line + "\n")
-    else:
-        for line in buf:
-            sys.stdout.write(line + "\n")
-        remaining = 0
-        for _ in rows:
-            remaining += 1
+    if count > 100:
         click.echo(
-            f"\n... truncated ({remaining} more objects). "
+            f"\n... truncated ({count - 100} more objects). "
             "Use --output to export all results.",
             err=True,
         )
