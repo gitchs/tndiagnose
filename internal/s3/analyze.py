@@ -52,20 +52,21 @@ def analyze(input_path, level, topk):
             FROM objects
             GROUP BY prefix
         ),
-        ranked AS (
+        tagged AS (
             SELECT
-                prefix,
-                total,
-                ROW_NUMBER() OVER (ORDER BY total DESC) AS rn,
-                SUM(total) OVER () AS grand_total
+                CASE
+                    WHEN ROW_NUMBER() OVER (ORDER BY total DESC) <= {topk} THEN prefix
+                    ELSE '__others__'
+                END AS display_prefix,
+                total
             FROM per_prefix
         )
         SELECT
-            CASE WHEN rn <= {topk} THEN prefix ELSE '__others__' END AS prefix,
+            display_prefix AS prefix,
             SUM(total)::BIGINT AS total,
-            SUM(total) * 100.0 / MAX(grand_total) AS ratio
-        FROM ranked
-        GROUP BY prefix
+            SUM(total) * 100.0 / SUM(SUM(total)) OVER () AS ratio
+        FROM tagged
+        GROUP BY display_prefix
         ORDER BY total DESC
         """
     ).fetchall()
