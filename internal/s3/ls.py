@@ -33,7 +33,9 @@ def _list_objects(bucket, prefix):
 
 
 def _write_output(rows, output_path):
-    """Write JSON Lines to file (optionally .zst compressed) or stdout."""
+    """Stream JSON Lines to file (optionally .zst compressed) or stdout."""
+
+    # --- file output: stream directly ---
     if output_path:
         if output_path.endswith(".zst"):
             cctx = zstandard.ZstdCompressor()
@@ -48,23 +50,31 @@ def _write_output(rows, output_path):
                     f.write(json.dumps(row) + "\n")
         return
 
-    # stdout — collect first, then decide truncation
-    lines = [json.dumps(r) for r in rows]
-    total = len(lines)
-    is_pipe = not sys.stdout.isatty()
+    # --- pipe stdout: stream everything ---
+    if not sys.stdout.isatty():
+        for row in rows:
+            sys.stdout.write(json.dumps(row) + "\n")
+        return
 
-    if is_pipe:
-        for line in lines:
-            sys.stdout.write(line + "\n")
-    elif total <= 100:
-        for line in lines:
+    # --- TTY stdout: buffer first 101 to decide truncation ---
+    buf = []
+    for row in rows:
+        buf.append(json.dumps(row))
+        if len(buf) > 100:
+            break
+
+    if len(buf) <= 100:
+        for line in buf:
             sys.stdout.write(line + "\n")
     else:
-        for line in lines[:100]:
+        for line in buf:
             sys.stdout.write(line + "\n")
+        remaining = 0
+        for _ in rows:
+            remaining += 1
         click.echo(
-            f"\n... truncated ({total - 100} more objects). "
-            f"Use --output to export all results.",
+            f"\n... truncated ({remaining} more objects). "
+            "Use --output to export all results.",
             err=True,
         )
 
@@ -86,9 +96,5 @@ def ls(uri, bucket, prefix, output_path):
     elif not bucket:
         raise click.UsageError("Either --bucket or an s3:// URI is required.")
 
-    rows = list(_list_objects(bucket, prefix))
-    if not rows:
-        click.echo("No objects found.")
-        return
-
+    rows = _list_objects(bucket, prefix)
     _write_output(rows, output_path)
