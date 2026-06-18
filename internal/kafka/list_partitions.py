@@ -1,9 +1,10 @@
 import csv
 
 import click
-from internal.kafka.kafkautils import fetch_partition_info, load_properties
 from rich.console import Console
 from rich.table import Table
+
+from internal.kafka.kafkautils import fetch_partition_info, load_properties
 
 
 @click.command("list-partitions")
@@ -30,7 +31,7 @@ from rich.table import Table
     help="Max parallel consumers. Actual = min(concurrent, partitions).",
 )
 def list_partitions(topic, config_path, output_path, concurrency):
-    """List per-partition offsets, message count, and latest message time."""
+    """List per-partition offsets, delta, and message timestamps."""
 
     conf = load_properties(config_path)
     rows = fetch_partition_info(conf, topic, concurrency=concurrency)
@@ -38,6 +39,11 @@ def list_partitions(topic, config_path, output_path, concurrency):
     if not rows:
         click.echo(f"No partition info found for topic: {topic}")
         return
+
+    total_delta = sum(int(r.get("delta", 0)) for r in rows)
+    for r in rows:
+        d = int(r.get("delta", 0))
+        r["ratio"] = f"{d / total_delta * 100:.1f}%" if total_delta else "0%"
 
     fieldnames = list(rows[0].keys())
 

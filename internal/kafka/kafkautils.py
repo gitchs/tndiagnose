@@ -6,6 +6,9 @@ from confluent_kafka import Consumer, TopicPartition
 from confluent_kafka.admin._config import ConfigResource
 from confluent_kafka.admin._resource import ResourceType
 
+# Defaults that silence librdkafka stderr logs; user config can override.
+_MUTED = {"debug": "", "log_level": 0}
+
 
 def load_properties(path):
     props = {}
@@ -79,9 +82,19 @@ def fetch_topic_configs(admin_client, timeout=10):
     return rows
 
 
+def _ts_from_msg(msg):
+    """Return ISO-8601 UTC timestamp from a Kafka message, or empty string."""
+    if msg and not msg.error():
+        ts_type, ts_ms = msg.timestamp()
+        if ts_type != 0:
+            return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
+    return ""
+
+
 def _fetch_partition_batch(consumer_conf, topic, partition_ids, timeout):
     """Fetch offset info for a batch of partitions using a dedicated consumer."""
     conf = {
+        **_MUTED,
         **consumer_conf,
         "group.id": f"tndiagnose-batch-{topic}",
         "enable.auto.commit": "false",
@@ -93,23 +106,25 @@ def _fetch_partition_batch(consumer_conf, topic, partition_ids, timeout):
             tp = TopicPartition(topic, p)
             lo, hi = c.get_watermark_offsets(tp, timeout=timeout)
 
-            timestamp = ""
+            earliest_ts = ""
+            latest_ts = ""
             if hi > lo:
+                # Latest message timestamp
                 c.assign([TopicPartition(topic, p, hi - 1)])
-                msg = c.poll(timeout)
-                if msg and not msg.error():
-                    ts_type, ts_ms = msg.timestamp()
-                    if ts_type != 0:
-                        dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
-                        timestamp = dt.isoformat()
+                latest_ts = _ts_from_msg(c.poll(timeout))
+
+                # Earliest message timestamp
+                c.assign([TopicPartition(topic, p, lo)])
+                earliest_ts = _ts_from_msg(c.poll(timeout))
 
             results.append(
                 {
                     "partition": p,
                     "earliest_offset": lo,
                     "latest_offset": hi,
-                    "messages": max(0, hi - lo),
-                    "message_time": timestamp,
+                    "delta": max(0, hi - lo),
+                    "earliest_message_time": earliest_ts,
+                    "latest_message_time": latest_ts,
                 }
             )
         return results
@@ -125,11 +140,11 @@ def fetch_partition_info(consumer_conf, topic, timeout=10, concurrency=8):
     ``min(concurrency, len(partitions))``.
 
     Returns a list of dicts with keys: partition, earliest_offset,
-    latest_offset, message_time (ISO-8601 string or empty), messages.
+    latest_offset, delta, earliest_message_time, latest_message_time.
     """
 
     # Discover partitions with a short-lived consumer
-    meta_conf = {**consumer_conf, "group.id": f"tndiagnose-meta-{topic}"}
+    meta_conf = {**_MUTED, **consumer_conf, "group.id": f"tndiagnose-meta-{topic}"}
     mc = Consumer(meta_conf)
     try:
         meta = mc.list_topics(topic, timeout=timeout)
