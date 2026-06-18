@@ -43,13 +43,29 @@ def analyze(input_path, level, topk):
 
     rows = db.execute(
         f"""
+        WITH per_prefix AS (
+            SELECT
+                COALESCE(
+                    array_to_string(list_slice(string_split(key, '/'), 1, {level}), '/'),
+                    key
+                ) AS prefix,
+                SUM(size)::BIGINT AS total
+            FROM objects
+            GROUP BY prefix
+        ),
+        ranked AS (
+            SELECT
+                prefix,
+                total,
+                ROW_NUMBER() OVER (ORDER BY total DESC) AS rn,
+                SUM(total) OVER () AS grand_total
+            FROM per_prefix
+        )
         SELECT
-          COALESCE(
-            array_to_string(list_slice(string_split(key, '/'), 1, {level}), '/'),
-            key
-          ) AS prefix,
-          SUM(size)::BIGINT AS total
-        FROM objects
+            CASE WHEN rn <= {topk} THEN prefix ELSE '__others__' END AS prefix,
+            SUM(total)::BIGINT AS total,
+            SUM(total) * 100.0 / MAX(grand_total) AS ratio
+        FROM ranked
         GROUP BY prefix
         ORDER BY total DESC
         """
@@ -62,6 +78,7 @@ def analyze(input_path, level, topk):
         return
 
     grand_total = sum(r[1] for r in rows)
+    others_row = next((r for r in rows if r[0] == "__others__"), None)
 
     console = Console()
     table = Table(title=f"Top directories (level {level})")
@@ -69,20 +86,19 @@ def analyze(input_path, level, topk):
     table.add_column("size", justify="right")
     table.add_column("ratio", justify="right")
 
-    top = rows[:topk]
-    others_size = sum(r[1] for r in rows[topk:])
-    others_ratio = others_size / grand_total * 100 if grand_total else 0
-
-    for prefix, total in top:
-        ratio = total / grand_total * 100 if grand_total else 0
+    for prefix, total, ratio in rows:
+        if prefix == "__others__":
+            continue
         table.add_row(prefix, _pretty_size(total), f"{ratio:.1f}%")
 
-    if others_size > 0:
+    if others_row:
         table.add_row(
             "[dim]others[/dim]",
-            _pretty_size(others_size),
-            f"{others_ratio:.1f}%",
+            _pretty_size(others_row[1]),
+            f"{others_row[2]:.1f}%",
         )
 
     console.print(table)
-    console.print(f"\nTotal: {_pretty_size(grand_total)} across {len(rows)} prefixes")
+    console.print(
+        f"\nTotal: {_pretty_size(grand_total)} across {len(rows) - (1 if others_row else 0)} prefixes"
+    )
