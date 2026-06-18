@@ -2,12 +2,14 @@
 
 ### Added
 
+- **`s3 analyze`** command: analyze directory sizes by depth level from an S3
+  object listing (`--input`). Uses DuckDB, prints TOP 10 + others via Rich.
 - **`s3 ls`** command: recursively list S3 objects as JSON Lines.
   - Accepts `--bucket`/`--prefix` or `s3://bucket/prefix` URI.
   - `--output` with `.zst` extension compresses via zstandard.
   - Stdout truncated at 100 lines unless piped.
 - **`tndiagnose`** top-level group: includes `kafka` and `s3` subcommands.
-- Dependencies: `boto3`, `zstandard`.
+- Dependencies: `boto3`, `duckdb`, `zstandard`.
 
 # 0.1.0
 ## 2026-06-18
