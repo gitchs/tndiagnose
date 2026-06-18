@@ -7,7 +7,7 @@ from confluent_kafka.admin._config import ConfigResource
 from confluent_kafka.admin._resource import ResourceType
 
 # Defaults that silence librdkafka stderr logs; user config can override.
-_MUTED = {"debug": "", "log_level": 0}
+_MUTED = {"log_level": 0}
 
 
 def load_properties(path):
