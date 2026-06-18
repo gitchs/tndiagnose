@@ -1,5 +1,8 @@
+from internal.kafka import cli
+
+
 def main():
-    print("Hello from tndiagnose!")
+    cli()
 
 
 if __name__ == "__main__":
