@@ -1,7 +1,11 @@
 # Changelog
 
-### Added
+### Changed
 
+- **`s3 analyze`**: split into `by-level` and `by-time` subcommands.
+  - `by-time` groups object sizes by day, with optional `--prefix` filter.
+
+### Added
 - **`s3 analyze`** command: analyze directory sizes by depth level from an S3
   object listing (`--input`). Uses DuckDB, prints TOP 10 + others via Rich.
 - **`s3 ls`** command: recursively list S3 objects as JSON Lines.

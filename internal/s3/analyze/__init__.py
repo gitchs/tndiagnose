@@ -13,7 +13,17 @@ def _pretty_size(n):
     return f"{n:.1f} PB"
 
 
-@click.command("analyze")
+def _load_objects(db, input_path):
+    db.execute(
+        f"""
+        CREATE OR REPLACE VIEW objects AS
+        SELECT key, size, last_modified
+        FROM read_json_auto('{input_path}', format='newline_delimited')
+        """
+    )
+
+
+@click.command("by-level")
 @click.option("--input", "input_path", required=True, help="JSON Lines file (.zst ok).")
 @click.option(
     "--level",
@@ -29,16 +39,11 @@ def _pretty_size(n):
     show_default=True,
     help="Number of top directories to show; rest grouped as others.",
 )
-def analyze(input_path, level, topk):
-    """Analyze directory sizes from an S3 object listing."""
+def by_level(input_path, level, topk):
+    """Analyze directory sizes by prefix depth."""
 
     db = duckdb.connect()
-    db.execute(
-        f"""
-        CREATE OR REPLACE VIEW objects AS
-        SELECT key, size FROM read_json_auto('{input_path}', format='newline_delimited')
-        """
-    )
+    _load_objects(db, input_path)
 
     rows = db.execute(
         f"""
@@ -100,5 +105,60 @@ def analyze(input_path, level, topk):
 
     console.print(table)
     console.print(
-        f"\nTotal: {_pretty_size(grand_total)} across {len(rows) - (1 if others_row else 0)} prefixes"
+        f"\nTotal: {_pretty_size(grand_total)} across "
+        f"{len(rows) - (1 if others_row else 0)} prefixes"
     )
+
+
+@click.command("by-time")
+@click.option("--input", "input_path", required=True, help="JSON Lines file (.zst ok).")
+@click.option("--prefix", default="", help="Filter objects by key prefix.")
+def by_time(input_path, prefix):
+    """Analyze storage size distribution over time (by day)."""
+
+    db = duckdb.connect()
+    _load_objects(db, input_path)
+
+    where = f"WHERE key LIKE '{prefix}%'" if prefix else ""
+
+    rows = db.execute(
+        f"""
+        SELECT
+            last_modified::DATE AS day,
+            SUM(size)::BIGINT AS total
+        FROM objects
+        {where}
+        GROUP BY day
+        ORDER BY day
+        """
+    ).fetchall()
+
+    db.close()
+
+    if not rows:
+        click.echo("No objects found.")
+        return
+
+    grand_total = sum(r[1] for r in rows)
+
+    console = Console()
+    table = Table(title=f"Size by day{' (prefix={prefix})' if prefix else ''}")
+    table.add_column("day", style="cyan")
+    table.add_column("size", justify="right")
+    table.add_column("ratio", justify="right")
+
+    for day, total in rows:
+        ratio = total / grand_total * 100 if grand_total else 0
+        table.add_row(str(day), _pretty_size(total), f"{ratio:.1f}%")
+
+    console.print(table)
+    console.print(f"\nTotal: {_pretty_size(grand_total)} across {len(rows)} days")
+
+
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+def cli():
+    """Analyze S3 object listings."""
+
+
+cli.add_command(by_level)
+cli.add_command(by_time)

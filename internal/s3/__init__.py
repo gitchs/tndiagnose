@@ -1,6 +1,6 @@
 import click
 
-from internal.s3.analyze import analyze
+from internal.s3.analyze import cli as analyze_cli
 from internal.s3.ls import ls
 
 
@@ -10,4 +10,4 @@ def cli():
 
 
 cli.add_command(ls)
-cli.add_command(analyze)
+cli.add_command(analyze_cli, name="analyze")
